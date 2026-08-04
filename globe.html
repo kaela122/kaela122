@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Lawrence Abad — Worldwide</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    background: radial-gradient(ellipse at 50% 30%, #0f1830 0%, #05070f 70%);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  #canvas-wrap { position: absolute; inset: 0; cursor: grab; }
+  #canvas-wrap:active { cursor: grabbing; }
+
+  .hud {
+    position: absolute;
+    left: 50%;
+    top: 28px;
+    transform: translateX(-50%);
+    text-align: center;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .hud h1 {
+    margin: 0;
+    font-size: 22px;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    color: #eaf2ff;
+    text-shadow: 0 0 18px rgba(46,158,247,0.55);
+  }
+  .hud p {
+    margin: 6px 0 0;
+    font-size: 12.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #7fa8d6;
+  }
+
+  .hint {
+    position: absolute;
+    bottom: 22px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 12px;
+    color: #6f88ac;
+    letter-spacing: 0.05em;
+    z-index: 5;
+    display: flex;
+    gap: 18px;
+    align-items: center;
+  }
+  .hint span { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #2E9EF7; box-shadow: 0 0 8px #2E9EF7; }
+  .dot.gold { background: #F7B32B; box-shadow: 0 0 8px #F7B32B; }
+
+  #tooltip {
+    position: absolute;
+    padding: 8px 14px;
+    background: rgba(10, 16, 32, 0.92);
+    border: 1px solid rgba(46,158,247,0.45);
+    border-radius: 10px;
+    color: #eaf2ff;
+    font-size: 13px;
+    font-weight: 500;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, -140%);
+    transition: opacity 0.18s ease;
+    white-space: nowrap;
+    z-index: 10;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+  }
+  #tooltip.show { opacity: 1; }
+  #tooltip .flag { margin-right: 6px; }
+</style>
+</head>
+<body>
+
+<div class="hud">
+  <h1>LAWRENCE ABAD</h1>
+  <p>🌍 Worldwide · Computer Science — Machine Learning</p>
+</div>
+
+<div id="canvas-wrap"></div>
+<div id="tooltip"></div>
+
+<div class="hint">
+  <span><span class="dot gold"></span> Home base</span>
+  <span><span class="dot"></span> Drag to rotate · Click a pin</span>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+  const wrap = document.getElementById('canvas-wrap');
+  const tooltip = document.getElementById('tooltip');
+
+  // ---------- Scene setup ----------
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+  camera.position.set(0, 0, 6.4);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  wrap.appendChild(renderer.domElement);
+
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.minDistance = 4;
+  controls.maxDistance = 10;
+  controls.enablePan = false;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.6;
+
+  // ---------- Globe: dotted sphere + wireframe + glow ----------
+  const R = 2.2;
+  const globeGroup = new THREE.Group();
+  scene.add(globeGroup);
+
+  // Base wireframe sphere (meridians/parallels)
+  const wireGeo = new THREE.SphereGeometry(R, 28, 20);
+  const wireMat = new THREE.MeshBasicMaterial({ color: 0x2E6FA6, wireframe: true, transparent: true, opacity: 0.28 });
+  globeGroup.add(new THREE.Mesh(wireGeo, wireMat));
+
+  // Dot-grid surface for a "data globe" feel
+  const dotGeo = new THREE.BufferGeometry();
+  const dotPositions = [];
+  const dotCount = 2600;
+  for (let i = 0; i < dotCount; i++) {
+    const phi = Math.acos(1 - 2 * (i + 0.5) / dotCount);
+    const theta = Math.PI * (1 + Math.sqrt(5)) * i;
+    const x = R * Math.sin(phi) * Math.cos(theta);
+    const y = R * Math.cos(phi);
+    const z = R * Math.sin(phi) * Math.sin(theta);
+    dotPositions.push(x, y, z);
+  }
+  dotGeo.setAttribute('position', new THREE.Float32BufferAttribute(dotPositions, 3));
+  const dotMat = new THREE.PointsMaterial({ color: 0x6fb8ff, size: 0.022, transparent: true, opacity: 0.85 });
+  globeGroup.add(new THREE.Points(dotGeo, dotMat));
+
+  // Outer atmosphere glow
+  const glowGeo = new THREE.SphereGeometry(R * 1.12, 32, 32);
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0x2E9EF7, transparent: true, opacity: 0.08, side: THREE.BackSide });
+  globeGroup.add(new THREE.Mesh(glowGeo, glowMat));
+
+  // Inner core (subtle depth)
+  const coreGeo = new THREE.SphereGeometry(R * 0.985, 32, 32);
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0x060a16, transparent: true, opacity: 0.9 });
+  globeGroup.add(new THREE.Mesh(coreGeo, coreMat));
+
+  // ---------- Location pins ----------
+  function latLonToVec3(lat, lon, radius) {
+    const phi = (90 - lat) * (Math.PI / 180);
+    const theta = (lon + 180) * (Math.PI / 180);
+    return new THREE.Vector3(
+      -radius * Math.sin(phi) * Math.cos(theta),
+      radius * Math.cos(phi),
+      radius * Math.sin(phi) * Math.sin(theta)
+    );
+  }
+
+  const cities = [
+    { name: 'Manila, Philippines',  flag: '🇵🇭', lat: 14.5995,  lon: 120.9842, home: true },
+    { name: 'San Francisco, USA',   flag: '🇺🇸', lat: 37.7749,  lon: -122.4194 },
+    { name: 'London, UK',           flag: '🇬🇧', lat: 51.5074,  lon: -0.1278 },
+    { name: 'Tokyo, Japan',         flag: '🇯🇵', lat: 35.6762,  lon: 139.6503 },
+    { name: 'Sydney, Australia',    flag: '🇦🇺', lat: -33.8688, lon: 151.2093 },
+    { name: 'São Paulo, Brazil',    flag: '🇧🇷', lat: -23.5505, lon: -46.6333 },
+  ];
+
+  const pinMeshes = [];
+  cities.forEach(city => {
+    const pos = latLonToVec3(city.lat, city.lon, R * 1.01);
+    const color = city.home ? 0xF7B32B : 0x2E9EF7;
+
+    const pinGeo = new THREE.SphereGeometry(city.home ? 0.055 : 0.04, 16, 16);
+    const pinMat = new THREE.MeshBasicMaterial({ color });
+    const pin = new THREE.Mesh(pinGeo, pinMat);
+    pin.position.copy(pos);
+    pin.userData = city;
+    globeGroup.add(pin);
+    pinMeshes.push(pin);
+
+    // pulsing halo ring
+    const ringGeo = new THREE.RingGeometry(city.home ? 0.09 : 0.07, city.home ? 0.11 : 0.085, 24);
+    const ringMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.copy(pos);
+    ring.lookAt(0, 0, 0);
+    ring.userData = { pulse: Math.random() * Math.PI * 2 };
+    globeGroup.add(ring);
+    pin.userData.ring = ring;
+  });
+
+  // ---------- Click ripple on globe surface ----------
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  const ripples = [];
+
+  function spawnRipple(point) {
+    const ringGeo = new THREE.RingGeometry(0.02, 0.05, 24);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x9fd3ff, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.copy(point.clone().multiplyScalar(1.015));
+    ring.lookAt(0, 0, 0);
+    ring.userData = { life: 0 };
+    globeGroup.add(ring);
+    ripples.push(ring);
+  }
+
+  function showTooltip(city, clientX, clientY) {
+    tooltip.innerHTML = `<span class="flag">${city.flag}</span>${city.name}`;
+    tooltip.style.left = clientX + 'px';
+    tooltip.style.top = clientY + 'px';
+    tooltip.classList.add('show');
+    clearTimeout(tooltip._t);
+    tooltip._t = setTimeout(() => tooltip.classList.remove('show'), 2200);
+  }
+
+  renderer.domElement.addEventListener('pointerdown', (e) => {
+    const rect = renderer.domElement.getBoundingClientRect();
+    pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+
+    const pinHits = raycaster.intersectObjects(pinMeshes);
+    if (pinHits.length) {
+      showTooltip(pinHits[0].object.userData, e.clientX, e.clientY);
+      return;
+    }
+    const globeHits = raycaster.intersectObjects(globeGroup.children.filter(c => c.geometry && c.geometry.type === 'SphereGeometry'));
+    if (globeHits.length) spawnRipple(globeHits[0].point);
+  });
+
+  // ---------- Resize ----------
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ---------- Animate ----------
+  const clock = new THREE.Clock();
+  function animate() {
+    requestAnimationFrame(animate);
+    const dt = clock.getDelta();
+    const t = clock.getElapsedTime();
+
+    pinMeshes.forEach(p => {
+      const ring = p.userData.ring;
+      ring.userData.pulse += dt * 2;
+      const s = 1 + 0.25 * Math.sin(ring.userData.pulse);
+      ring.scale.set(s, s, s);
+      ring.lookAt(camera.position);
+    });
+
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      const r = ripples[i];
+      r.userData.life += dt;
+      const s = 1 + r.userData.life * 4;
+      r.scale.set(s, s, s);
+      r.material.opacity = Math.max(0, 0.9 - r.userData.life * 0.9);
+      if (r.userData.life > 1) {
+        globeGroup.remove(r);
+        ripples.splice(i, 1);
+      }
+    }
+
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+</script>
+</body>
+</html>
