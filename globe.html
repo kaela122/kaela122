@@ -4,12 +4,21 @@
 <meta charset="UTF-8" />
 <title>Lawrence Abad — Worldwide</title>
 <style>
+  :root {
+    --bg-gradient: radial-gradient(ellipse at 50% 30%, #0f1830 0%, #05070f 70%);
+    --accent: #2E9EF7;
+    --pin-home: #F7B32B;
+    --hud-title-color: #eaf2ff;
+    --hud-title-shadow: rgba(46,158,247,0.55);
+    --hud-sub-color: #7fa8d6;
+  }
   html, body {
     margin: 0;
     padding: 0;
     height: 100%;
     overflow: hidden;
-    background: radial-gradient(ellipse at 50% 30%, #0f1830 0%, #05070f 70%);
+    background: var(--bg-gradient);
+    transition: background 0.7s ease;
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   }
   #canvas-wrap { position: absolute; inset: 0; cursor: grab; }
@@ -29,15 +38,17 @@
     font-size: 22px;
     letter-spacing: 0.08em;
     font-weight: 600;
-    color: #eaf2ff;
-    text-shadow: 0 0 18px rgba(46,158,247,0.55);
+    color: var(--hud-title-color);
+    text-shadow: 0 0 18px var(--hud-title-shadow);
+    transition: color 0.5s ease, text-shadow 0.5s ease;
   }
   .hud p {
     margin: 6px 0 0;
     font-size: 12.5px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: #7fa8d6;
+    color: var(--hud-sub-color);
+    transition: color 0.5s ease;
   }
 
   .hint {
@@ -54,8 +65,8 @@
     align-items: center;
   }
   .hint span { display: flex; align-items: center; gap: 6px; }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: #2E9EF7; box-shadow: 0 0 8px #2E9EF7; }
-  .dot.gold { background: #F7B32B; box-shadow: 0 0 8px #F7B32B; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); transition: background 0.5s ease, box-shadow 0.5s ease; }
+  .dot.gold { background: var(--pin-home); box-shadow: 0 0 8px var(--pin-home); }
 
   #tooltip {
     position: absolute;
@@ -76,6 +87,51 @@
   }
   #tooltip.show { opacity: 1; }
   #tooltip .flag { margin-right: 6px; }
+
+  #theme-toggle {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    z-index: 6;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 16px;
+    background: rgba(10, 16, 32, 0.72);
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    color: var(--hud-title-color);
+    font-size: 12.5px;
+    letter-spacing: 0.06em;
+    font-family: inherit;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    transition: border-color 0.5s ease, color 0.5s ease, transform 0.15s ease, box-shadow 0.5s ease;
+    box-shadow: 0 0 14px rgba(0,0,0,0.35);
+  }
+  #theme-toggle:hover { transform: translateY(-1px); box-shadow: 0 0 18px var(--accent); }
+  #theme-toggle:active { transform: translateY(0px) scale(0.97); }
+  #theme-toggle .swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    transition: background 0.5s ease, box-shadow 0.5s ease;
+  }
+
+  #border-status {
+    position: absolute;
+    top: 70px;
+    right: 24px;
+    z-index: 6;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    color: var(--hud-sub-color);
+    opacity: 0.8;
+    transition: opacity 0.4s ease, color 0.5s ease;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
@@ -88,16 +144,66 @@
 <div id="canvas-wrap"></div>
 <div id="tooltip"></div>
 
+<button id="theme-toggle" title="Cycle globe theme">
+  <span class="swatch"></span>
+  <span id="theme-label">Space</span>
+</button>
+<div id="border-status">Loading country borders…</div>
+
 <div class="hint">
   <span><span class="dot gold"></span> Home base</span>
   <span><span class="dot"></span> Drag to rotate · Click a pin</span>
+  <span>🎨 Click top-right to change theme</span>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
 <script>
   const wrap = document.getElementById('canvas-wrap');
   const tooltip = document.getElementById('tooltip');
+  const themeBtn = document.getElementById('theme-toggle');
+  const themeLabel = document.getElementById('theme-label');
+  const borderStatus = document.getElementById('border-status');
+  const root = document.documentElement;
+
+  // ---------- Color themes ----------
+  const themes = [
+    {
+      name: 'Space',
+      bg: 'radial-gradient(ellipse at 50% 30%, #0f1830 0%, #05070f 70%)',
+      wire: 0x2E6FA6, dots: 0x6fb8ff, glow: 0x2E9EF7, core: 0x060a16, border: 0x9fd0ff,
+      pinHome: 0xF7B32B, pinOther: 0x2E9EF7, ripple: 0x9fd3ff,
+      hudTitle: '#eaf2ff', hudTitleShadow: 'rgba(46,158,247,0.55)', hudSub: '#7fa8d6',
+      accent: '#2E9EF7', pinHomeCss: '#F7B32B'
+    },
+    {
+      name: 'Aurora',
+      bg: 'radial-gradient(ellipse at 50% 30%, #0c2b23 0%, #051512 70%)',
+      wire: 0x2E9E6F, dots: 0x6fffc8, glow: 0x39ff9e, core: 0x06160f, border: 0xaaffdf,
+      pinHome: 0xF7B32B, pinOther: 0xB47CFF, ripple: 0x9fffd3,
+      hudTitle: '#eafff2', hudTitleShadow: 'rgba(57,255,158,0.55)', hudSub: '#7fd6a8',
+      accent: '#39ff9e', pinHomeCss: '#F7B32B'
+    },
+    {
+      name: 'Sunset',
+      bg: 'radial-gradient(ellipse at 50% 30%, #301a14 0%, #12070a 70%)',
+      wire: 0xE0692E, dots: 0xffb36f, glow: 0xFF6B4A, core: 0x160a06, border: 0xffd9b3,
+      pinHome: 0xFFD23F, pinOther: 0xFF4A7D, ripple: 0xffd39f,
+      hudTitle: '#fff2ea', hudTitleShadow: 'rgba(255,107,74,0.55)', hudSub: '#d6a87f',
+      accent: '#FF6B4A', pinHomeCss: '#FFD23F'
+    },
+    {
+      name: 'Ocean',
+      bg: 'radial-gradient(ellipse at 50% 30%, #0a2733 0%, #030d12 70%)',
+      wire: 0x1F9EC4, dots: 0x6fe4ff, glow: 0x2EDFF7, core: 0x061014, border: 0xb3f2ff,
+      pinHome: 0xFFB84D, pinOther: 0x2EDFF7, ripple: 0x9ff3ff,
+      hudTitle: '#eafcff', hudTitleShadow: 'rgba(46,223,247,0.55)', hudSub: '#7fc9d6',
+      accent: '#2EDFF7', pinHomeCss: '#FFB84D'
+    }
+  ];
+  let currentThemeIndex = 0;
+  let currentRippleColor = themes[0].ripple;
 
   // ---------- Scene setup ----------
   const scene = new THREE.Scene();
@@ -125,7 +231,7 @@
 
   // Base wireframe sphere (meridians/parallels)
   const wireGeo = new THREE.SphereGeometry(R, 28, 20);
-  const wireMat = new THREE.MeshBasicMaterial({ color: 0x2E6FA6, wireframe: true, transparent: true, opacity: 0.28 });
+  const wireMat = new THREE.MeshBasicMaterial({ color: themes[0].wire, wireframe: true, transparent: true, opacity: 0.28 });
   globeGroup.add(new THREE.Mesh(wireGeo, wireMat));
 
   // Dot-grid surface for a "data globe" feel
@@ -141,17 +247,17 @@
     dotPositions.push(x, y, z);
   }
   dotGeo.setAttribute('position', new THREE.Float32BufferAttribute(dotPositions, 3));
-  const dotMat = new THREE.PointsMaterial({ color: 0x6fb8ff, size: 0.022, transparent: true, opacity: 0.85 });
+  const dotMat = new THREE.PointsMaterial({ color: themes[0].dots, size: 0.022, transparent: true, opacity: 0.85 });
   globeGroup.add(new THREE.Points(dotGeo, dotMat));
 
   // Outer atmosphere glow
   const glowGeo = new THREE.SphereGeometry(R * 1.12, 32, 32);
-  const glowMat = new THREE.MeshBasicMaterial({ color: 0x2E9EF7, transparent: true, opacity: 0.08, side: THREE.BackSide });
+  const glowMat = new THREE.MeshBasicMaterial({ color: themes[0].glow, transparent: true, opacity: 0.08, side: THREE.BackSide });
   globeGroup.add(new THREE.Mesh(glowGeo, glowMat));
 
   // Inner core (subtle depth)
   const coreGeo = new THREE.SphereGeometry(R * 0.985, 32, 32);
-  const coreMat = new THREE.MeshBasicMaterial({ color: 0x060a16, transparent: true, opacity: 0.9 });
+  const coreMat = new THREE.MeshBasicMaterial({ color: themes[0].core, transparent: true, opacity: 0.9 });
   globeGroup.add(new THREE.Mesh(coreGeo, coreMat));
 
   // ---------- Location pins ----------
@@ -177,7 +283,7 @@
   const pinMeshes = [];
   cities.forEach(city => {
     const pos = latLonToVec3(city.lat, city.lon, R * 1.01);
-    const color = city.home ? 0xF7B32B : 0x2E9EF7;
+    const color = city.home ? themes[0].pinHome : themes[0].pinOther;
 
     const pinGeo = new THREE.SphereGeometry(city.home ? 0.055 : 0.04, 16, 16);
     const pinMat = new THREE.MeshBasicMaterial({ color });
@@ -198,6 +304,95 @@
     pin.userData.ring = ring;
   });
 
+  // ---------- Country border outlines ----------
+  let borderMat = null;
+
+  function addCountryBorders(geojson) {
+    const positions = [];
+    const BORDER_R = R * 1.006; // just above the dot/wire sphere, below pins
+
+    function processRing(ring) {
+      for (let i = 0; i < ring.length - 1; i++) {
+        const [lon1, lat1] = ring[i];
+        const [lon2, lat2] = ring[i + 1];
+        const p1 = latLonToVec3(lat1, lon1, BORDER_R);
+        const p2 = latLonToVec3(lat2, lon2, BORDER_R);
+        positions.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+      }
+    }
+    function processPolygon(rings) { rings.forEach(processRing); }
+
+    geojson.features.forEach(feature => {
+      const geom = feature.geometry;
+      if (!geom) return;
+      if (geom.type === 'Polygon') {
+        processPolygon(geom.coordinates);
+      } else if (geom.type === 'MultiPolygon') {
+        geom.coordinates.forEach(processPolygon);
+      }
+    });
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    borderMat = new THREE.LineBasicMaterial({
+      color: themes[currentThemeIndex].border,
+      transparent: true,
+      opacity: 0.55
+    });
+    const lines = new THREE.LineSegments(geo, borderMat);
+    globeGroup.add(lines);
+  }
+
+  fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
+    .then(res => res.json())
+    .then(topology => {
+      const geojson = topojson.feature(topology, topology.objects.countries);
+      addCountryBorders(geojson);
+      borderStatus.textContent = 'Country borders loaded';
+      setTimeout(() => { borderStatus.style.opacity = '0'; }, 1800);
+    })
+    .catch(err => {
+      console.warn('Could not load country borders:', err);
+      borderStatus.textContent = 'Borders unavailable offline';
+      setTimeout(() => { borderStatus.style.opacity = '0'; }, 2500);
+    });
+
+  // ---------- Theme switching ----------
+  function applyTheme(idx) {
+    const th = themes[idx];
+
+    // Three.js material colors
+    wireMat.color.setHex(th.wire);
+    dotMat.color.setHex(th.dots);
+    glowMat.color.setHex(th.glow);
+    coreMat.color.setHex(th.core);
+    currentRippleColor = th.ripple;
+    if (borderMat) borderMat.color.setHex(th.border);
+
+    pinMeshes.forEach(p => {
+      const c = p.userData.home ? th.pinHome : th.pinOther;
+      p.material.color.setHex(c);
+      p.userData.ring.material.color.setHex(c);
+    });
+
+    // CSS-side theming
+    root.style.setProperty('--bg-gradient', th.bg);
+    root.style.setProperty('--accent', th.accent);
+    root.style.setProperty('--pin-home', th.pinHomeCss);
+    root.style.setProperty('--hud-title-color', th.hudTitle);
+    root.style.setProperty('--hud-title-shadow', th.hudTitleShadow);
+    root.style.setProperty('--hud-sub-color', th.hudSub);
+
+    themeLabel.textContent = th.name;
+  }
+
+  themeBtn.addEventListener('click', () => {
+    currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+    applyTheme(currentThemeIndex);
+  });
+
+  applyTheme(0); // sync CSS vars with initial theme
+
   // ---------- Click ripple on globe surface ----------
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -205,7 +400,7 @@
 
   function spawnRipple(point) {
     const ringGeo = new THREE.RingGeometry(0.02, 0.05, 24);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0x9fd3ff, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
+    const ringMat = new THREE.MeshBasicMaterial({ color: currentRippleColor, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.position.copy(point.clone().multiplyScalar(1.015));
     ring.lookAt(0, 0, 0);
