@@ -70,6 +70,16 @@
 
 ---
 
+### 🌍 Explore Interactively
+
+<p align="center">
+<a href="https://kaela122.github.io/kaela122/globe.html" target="_blank">
+<img src="https://img.shields.io/badge/🌍_Launch_Interactive_Globe-2E9EF7?style=for-the-badge" alt="Launch Interactive Globe" />
+</a>
+</p>
+
+---
+
 ### 📊 GitHub Stats
 
 <p align="center">
